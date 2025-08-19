@@ -77,12 +77,10 @@ QA-Chatbot/
 │   ├── components/
 │   │   ├── WLOSidebar.jsx
 │   │   └── LearningAnalyticsSidebar.jsx
-│   ├── data/
-│   │   ├── qaDataset.js            # Allgemeine QA-Konstanten/Prompts
-│   │   └── qa_*.json               # Quellen-JSON mit QA-Paaren (optional, Fallback)
 │   ├── lib/
 │   │   ├── chatUtils.js
-│   │   ├── datasetLoader.js        # Lädt /quant/*.items.json oder Fallback aus src/data
+│   │   ├── systemPrompt.js         # Zentraler System-Prompt
+│   │   ├── datasetLoader.js        # Lädt nur /quant/*.items.json und *.meta.json
 │   │   ├── learningAnalytics.js
 │   │   ├── mappings.js
 │   │   └── types.js
@@ -112,8 +110,9 @@ QA-Chatbot/
 
 ### QA-Dataset
 
-- Standardmäßig lädt die App kompakte Datensätze aus `public/quant/<datasetId>.items.json`.
-- Falls diese Datei fehlt, lädt sie als Fallback `src/data/<datasetId>.json` via Vite-Import.
+- Standardmäßig lädt die App kompakte Datensätze aus `public/quant/<datasetId>.items.json` und `public/quant/<datasetId>.meta.json`.
+- Es gibt keinen Fallback auf `src/data/`; nur Quant-Assets werden unterstützt.
+- Standard-Dataset: `qa_Klexikon-Prod-180825` (konfigurierbar im Interface).
 - Auswahl des Datensatzes erfolgt im Interface (Einstellungen → Dataset-Auswahl).
 
 **Ausgangsdaten (Quelle) – JSON Schema:**
@@ -209,7 +208,12 @@ npm run preview
 ## 📝 Anpassungen
 
 ### Neue QA-Paare hinzufügen
-Bearbeite `src/data/qaDataset.js` und füge neue Objekte zum Array hinzu.
+So bringst du neue/aktualisierte QA-Daten in die App:
+
+- Quelle: Bearbeite eine JSON-Datei mit QA-Paaren (z. B. `scripts/qa_*.json`).
+- Preprocessing: Erzeuge kompakte Assets mit dem Python-Skript (siehe unten) und Ausgabe nach `public/quant/`.
+- Ergebnis: Mindestens `<datasetId>.items.json` und `<datasetId>.meta.json` (plus Embedding-Binärdateien, falls konfiguriert).
+- Nutzung: App neu laden; Dataset im Interface auswählen.
 
 ### WLO-Mappings erweitern
 Bearbeite `src/lib/mappings.js` um neue Fächer oder Inhaltstypen hinzuzufügen.
@@ -222,7 +226,7 @@ Modifiziere `src/lib/learningAnalytics.js` für neue Analyse-Kriterien.
 Zur effizienten Auslieferung großer QA-Datensätze unterstützt die App kompakte Embeddings mit PCA-Reduktion und Int8-Quantisierung. Diese werden offline per Python-Skript erzeugt und zur Laufzeit automatisch genutzt.
 
 ### Datenablage
-- **Eingabe (Q/A-Inhalte):** JSON-Datei mit QA-Paaren, idealerweise unter `src/data/`.
+- **Eingabe (Q/A-Inhalte):** JSON-Datei mit QA-Paaren an einem beliebigen Ort (z. B. unter `scripts/`).
 - **Ausgabe (kompakte Embeddings + Items):** Dateien unter `public/quant/`, Laufzeitpfad `/quant/*`.
 - `datasetId` = Dateiname ohne `.json` und Präfix für alle Ausgabedateien.
 
@@ -232,7 +236,7 @@ Voraussetzungen: `pip install --upgrade openai numpy`
 PowerShell (Windows):
 ```powershell
 $env:OPENAI_API_KEY = "<dein-openai-key>"
-python scripts/precompute_openai_embeddings.py -i src/data/qa_Klexikon-Prod-180825.json --out-dir public/quant --pca-dim 256 --quantize -c 20
+python scripts/precompute_openai_embeddings.py -i scripts/qa_Klexikon-Prod-180825.json --out-dir public/quant --pca-dim 256 --quantize -c 20
 ```
 
 Hinweise:
@@ -242,27 +246,19 @@ Hinweise:
   - `qa_Klexikon-Prod-180825.pca_mean.bin`
   - `qa_Klexikon-Prod-180825.meta.json`
   - `qa_Klexikon-Prod-180825.items.json`
-- Die App nutzt diese kompakten Assets automatisch (Fallback auf Legacy-Embeddings, falls nicht verfügbar).
-- Die JSON mit QA-Paaren bleibt in `src/data/` als Quelle; `items.json` ist die minifizierte Laufzeit-Repräsentation ohne Embeddings.
+- Die App nutzt ausschließlich diese kompakten Assets zur Laufzeit.
+- Die JSON mit QA-Paaren dient nur als Quelle für die Vorverarbeitung; sie wird nicht mehr direkt geladen.
 
-Optional statt Kopie neben das Skript: Du kannst bei `-i` auch einen relativen Pfad zur JSON-Datei angeben (z. B. `src/data/…`), wenn du das bevorzugst.
-
-### Legacy-Export (optional)
-Falls du Float-Embeddings weiterhin direkt in die JSON schreiben möchtest:
-
-```powershell
-$env:OPENAI_API_KEY = "<dein-openai-key>"
-python scripts/precompute_openai_embeddings.py -i src/data/qa_Klexikon-Prod-180825.json --format json --no-quantize --no-pca -o src/data/qa_Klexikon-Prod-180825_embedding.json
-```
+Optional statt Kopie neben das Skript: Du kannst bei `-i` auch einen relativen Pfad zur JSON-Datei angeben (z. B. `scripts/…`), wenn du das bevorzugst.
 
 ### Laufzeitverhalten
 - Die App lädt automatisch `/quant/<datasetId>.items.json` und `/quant/<datasetId>.meta.json` und sucht nur per Embeddings.
-- Falls keine kompakten Assets vorhanden sind, Fallback auf `src/data/<datasetId>.json` mit Legacy-Embeddings (falls dort enthalten).
+- Es gibt keinen Fallback auf JSON-Dateien im Quellcode.
 - Empfohlene Einstellungen: PCA-Dimension `256`, Quantisierung `Int8`.
 
 ### Troubleshooting
 - Nach dem Kopieren/Erzeugen der Binärdateien einmal hart neu laden (Browser-Cache), da Assets mit `cache: 'force-cache'` geladen werden.
-- Achte auf identische `datasetId` zwischen `src/data/<id>.json` und den Dateien in `public/quant/<id>.*`.
+- Achte auf identische `datasetId` zwischen deiner Quelle und den Dateien in `public/quant/<id>.*`.
 - Bei Änderungen an Reihenfolge/Anzahl der Q/A-Items in der JSON die kompakten Assets neu erzeugen, damit das Index-Mapping korrekt bleibt.
 
 ## 🧩 Hinweise zur UI (aktuelle Wahlmöglichkeiten)

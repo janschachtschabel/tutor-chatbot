@@ -19,7 +19,7 @@ function App() {
   const [apiKey, setApiKey] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [currentProvider, setCurrentProviderState] = useState(null);
-  const [qaSettings, setQASettingsState] = useState({ enabled: true, similarityThreshold: 0.3 });
+  const [qaSettings, setQASettingsState] = useState({ enabled: true, similarityThreshold: 0.5 });
   const [wloSettings, setWLOSettings] = useState({ enabled: true, debugMode: false, sourceFilter: '', environment: 'production' });
   const [currentWLOSuggestions, setCurrentWLOSuggestions] = useState([]);
   const [learningProgress, setLearningProgress] = useState(learningAnalytics.getLearningProgress());

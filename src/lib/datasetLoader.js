@@ -1,7 +1,6 @@
-// Utilities to load and normalize swappable QA datasets from src/data/
-// Supports JSON datasets and a built-in sample JS dataset
+// Utilities to load and normalize swappable QA datasets from public/quant/
+// Removed src/data/ JSON and built-in JS dataset support
 
-import { qaDataset as builtinDataset } from '../data/qaDataset.js';
 import { getEmbeddingMeta } from '../services/embeddingService.js';
 
 const LOCAL_STORAGE_KEY = 'qa_dataset_id';
@@ -13,16 +12,6 @@ const QUANT_CACHE = new Map();
 // Cache for loaded datasets: { [id]: { items: NormalizedQA[], hasEmbeddings: boolean } }
 const DATASET_CACHE = new Map();
 
-// Build an index of available JSON datasets using Vite's glob import
-// Key: virtual path, Value: async loader () => module
-const jsonModules = import.meta.glob('../data/*.json');
-
-function pathToId(path) {
-  // Example: '../data/qa_Klexikon-Prod-180825.json' -> 'qa_Klexikon-Prod-180825'
-  const match = path.match(/([^\/]+)\.json$/);
-  return match ? match[1] : path;
-}
-
 function idToNiceName(id) {
   // Replace underscores/dashes and add spaces, keep case
   return id
@@ -33,18 +22,13 @@ function idToNiceName(id) {
 
 export function listAvailableDatasets() {
   const list = [];
-  // Built-in JS dataset entry
-  list.push({ id: 'builtin-sample', name: 'Beispiel (integriertes QA-Set)', kind: 'builtin' });
-  for (const path in jsonModules) {
-    const id = pathToId(path);
-    list.push({ id, name: idToNiceName(id), kind: 'json', path });
-  }
-  // Also expose datasets provided via compact quantized assets in /public/quant
+  // Expose datasets provided via compact quantized assets in /public/quant
   const klexId = 'qa_Klexikon-Prod-180825';
   if (!list.some(d => d.id === klexId)) {
     list.push({ id: klexId, name: idToNiceName(klexId), kind: 'quant' });
   }
-  return list;
+  // Remove any demo datasets from UI
+  return list.filter(d => d.id.toLowerCase() !== 'demo' && !/^demo(\b|[-_])/.test(d.id.toLowerCase()));
 }
 
 export function getSelectedDatasetId() {
@@ -57,8 +41,6 @@ export function setSelectedDatasetId(id) {
 }
 
 export function getDefaultDatasetId() {
-  const jsonIds = Object.keys(jsonModules).map(pathToId);
-  if (jsonIds.length > 0) return jsonIds[0];
   // Prefer Klexikon quantized dataset if available in public/quant
   return 'qa_Klexikon-Prod-180825';
 }
@@ -79,30 +61,43 @@ function normalizeRecord(rec) {
   };
 }
 
-async function loadJsonDataset(path) {
-  const mod = await jsonModules[path]();
-  // Vite JSON import default-exports the parsed content
-  const data = mod?.default || mod;
-  if (!Array.isArray(data)) return [];
-  return data.map(normalizeRecord);
-}
+// Removed JSON and builtin dataset loaders
 
-async function loadBuiltinDataset() {
-  return (builtinDataset || []).map(normalizeRecord);
-}
-
-// Try to load compact items JSON from /quant/<id>.items.json
+// Try to load compact items JSON from /quant/<id>.items.json with basic retry and diagnostics
 async function loadQuantItemsById(id) {
   const base = quantBasePathForId(id);
-  try {
-    const resp = await fetch(`${base}.items.json`, { cache: 'force-cache' });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    if (!Array.isArray(data)) return null;
-    return data.map(normalizeRecord);
-  } catch (e) {
-    return null;
+  const url = `${base}.items.json`;
+
+  const attempt = async (cacheMode) => {
+    try {
+      const resp = await fetch(url, { cache: cacheMode });
+      if (!resp.ok) {
+        console.warn('[datasetLoader] Items fetch not ok', { url, status: resp.status, cacheMode });
+        return null;
+      }
+      const data = await resp.json();
+      if (!Array.isArray(data)) {
+        console.warn('[datasetLoader] Items JSON is not an array', { url, type: typeof data });
+        return null;
+      }
+      if (data.length === 0) {
+        console.warn('[datasetLoader] Items JSON array is empty', { url });
+      }
+      return data.map(normalizeRecord);
+    } catch (e) {
+      console.warn('[datasetLoader] Items fetch failed', { url, cacheMode, error: e?.message || String(e) });
+      return null;
+    }
+  };
+
+  // First try using cache to leverage browser caching
+  let items = await attempt('force-cache');
+  if (!items || items.length === 0) {
+    // Retry once bypassing cache to avoid stale/empty cache issues
+    const retry = await attempt('no-cache');
+    if (retry && retry.length > 0) items = retry;
   }
+  return items || [];
 }
 
 function loadCachedEmbeddings(datasetId) {
@@ -163,25 +158,19 @@ export async function loadDatasetById(id) {
     return DATASET_CACHE.get(id);
   }
   let items = [];
-  if (id === 'builtin-sample') {
-    items = await loadBuiltinDataset();
-  } else {
-    // Prefer compact items from /quant if available
-    const quantItems = await loadQuantItemsById(id);
-    if (Array.isArray(quantItems) && quantItems.length > 0) {
-      items = quantItems;
-    } else {
-      // Fallback to bundled JSON via Vite glob
-      const entry = Object.keys(jsonModules).find(p => pathToId(p) === id);
-      if (entry) {
-        items = await loadJsonDataset(entry);
-      }
-    }
+  // Prefer compact items from /quant if available
+  const quantItems = await loadQuantItemsById(id);
+  if (Array.isArray(quantItems) && quantItems.length > 0) {
+    items = quantItems;
   }
   // Try to merge cached embeddings from localStorage
   items = mergeCachedEmbeddings(id, items);
   const hasEmbeddings = items.length > 0 && items.some(it => Array.isArray(it.embedding));
   const value = { items, hasEmbeddings };
+  if (items.length === 0) {
+    console.warn('[datasetLoader] No items loaded for dataset', id, '- will not cache empty result to allow retry.');
+    return value;
+  }
   DATASET_CACHE.set(id, value);
   return value;
 }
@@ -194,9 +183,19 @@ export async function getActiveDataset() {
 export async function getDatasetInfo(id = getSelectedDatasetId()) {
   const { items, hasEmbeddings } = await loadDatasetById(id);
   const categories = Array.from(new Set(items.map(it => it.category).filter(Boolean)));
+  let count = items.length;
+  // Fallback: if items not yet loaded but quant assets are available, use meta.rows for count
+  if (count === 0) {
+    try {
+      const quant = await getQuantAssetsForDataset(id);
+      if (quant?.available && Number.isFinite(quant?.meta?.rows)) {
+        count = quant.meta.rows;
+      }
+    } catch {}
+  }
   return {
     id,
-    count: items.length,
+    count,
     categories,
     hasEmbeddings
   };

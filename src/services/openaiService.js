@@ -1,5 +1,5 @@
 // LLM service for client-side API calls with multiple providers
-import { SYSTEM_PROMPT } from '../data/qaDataset.js';
+import { SYSTEM_PROMPT } from '../lib/systemPrompt.js';
 import {
   listAvailableDatasets as dl_list,
   getDatasetInfo as dl_info,
@@ -31,13 +31,33 @@ export const LLM_PROVIDERS = {
 // QA Settings management
 export function getQASettings() {
   const qaEnabled = localStorage.getItem('qa_enabled');
-  const similarityThreshold = localStorage.getItem('qa_similarity_threshold');
+  const similarityThresholdRaw = localStorage.getItem('qa_similarity_threshold');
   const datasetId = localStorage.getItem('qa_dataset_id');
-  
+  // Validate/normalize dataset selection
+  const list = dl_list();
+  let effectiveId = datasetId;
+  if (!effectiveId || !list.some(d => d.id === effectiveId)) {
+    effectiveId = list.find(d => d.id === 'qa_Klexikon-Prod-180825')?.id || list[0]?.id || 'qa_Klexikon-Prod-180825';
+    try {
+      localStorage.setItem('qa_dataset_id', effectiveId);
+    } catch {}
+    dl_setSelectedId(effectiveId);
+  }
+
+  // Parse and clamp similarity threshold
+  let threshold = 0.5;
+  if (similarityThresholdRaw !== null) {
+    const v = parseFloat(similarityThresholdRaw);
+    if (Number.isFinite(v)) {
+      // Clamp to slider range [0.1, 0.9]
+      threshold = Math.min(0.9, Math.max(0.1, v));
+    }
+  }
+
   return {
     enabled: qaEnabled !== null ? JSON.parse(qaEnabled) : true, // Default: enabled
-    similarityThreshold: similarityThreshold ? parseFloat(similarityThreshold) : 0.3, // Default: 0.3
-    datasetId: datasetId || dl_selectedId()
+    similarityThreshold: threshold, // Robust default/clamped
+    datasetId: effectiveId
   };
 }
 
@@ -103,7 +123,7 @@ export async function findBestMatch(userQuestion) {
       }
     }
     if (best) {
-      const threshold = qaSettings.similarityThreshold || 0.75;
+      const threshold = qaSettings.similarityThreshold ?? 0.5;
       return best.similarity >= threshold ? best : null;
     }
   }
@@ -118,7 +138,7 @@ export async function findBestMatch(userQuestion) {
       .map(it => ({ ...it, similarity: cosineSimilarity(queryVec, it.embedding) }));
     if (sims.length === 0) return null;
     const best = sims.reduce((a, b) => (b.similarity > a.similarity ? b : a));
-    const threshold = qaSettings.similarityThreshold || 0.75; // cosine threshold
+    const threshold = qaSettings.similarityThreshold ?? 0.5; // default 0.5
     return best.similarity >= threshold ? best : null;
   }
   
@@ -190,13 +210,24 @@ function enforceLabelPrefix(text, wantQALabel) {
     if (!text) return text;
     const qaLabel = '**[GEPRÜFTE ANTWORT AUF QA-BASIS]**';
     const aiLabel = '**[UNSICHERE ANTWORT AUF KI-BASIS]**';
-    const trimmed = text.trimStart();
+
+    // Normalize any existing (possibly malformed) label at the start
+    let normalized = text.replace(
+      /^\s*(\*\*)?\[\s*GEPRÜFTE\s+ANTWORT\s+AUF\s+QA-BASIS\s*\](\*\*)?/i,
+      qaLabel
+    ).replace(
+      /^\s*(\*\*)?\[\s*UNSICHERE\s+ANTWORT(E)?\s+AUF\s+KI-BASIS\s*\](\*\*)?/i,
+      aiLabel
+    );
+
+    const trimmed = normalized.trimStart();
     const hasQALabel = trimmed.startsWith(qaLabel) || trimmed.startsWith('[GEPRÜFTE ANTWORT AUF QA-BASIS]');
     const hasAILabel = trimmed.startsWith(aiLabel) || trimmed.startsWith('[UNSICHERE ANTWORT AUF KI-BASIS]');
+
     if (wantQALabel) {
-      return hasQALabel ? text : `${qaLabel}\n\n${text}`;
+      return hasQALabel ? normalized : `${qaLabel}\n\n${normalized}`;
     } else {
-      return hasAILabel ? text : `${aiLabel}\n\n${text}`;
+      return hasAILabel ? normalized : `${aiLabel}\n\n${normalized}`;
     }
   } catch (e) {
     return text;
