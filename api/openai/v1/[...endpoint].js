@@ -15,6 +15,15 @@ export default async function handler(req, res) {
       return;
     }
 
+    // Handle CORS preflight
+    if (req.method === 'OPTIONS') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+      res.status(204).end();
+      return;
+    }
+
     // Read incoming body safely
     const body = await getRawBody(req);
 

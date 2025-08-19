@@ -1,0 +1,30 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/edu-sharing/rest/:path*",
+      "destination": "https://redaktion.openeduhub.net/edu-sharing/rest/:path*"
+    },
+    {
+      "source": "/api/edu-sharing-staging/rest/:path*",
+      "destination": "https://repository.staging.openeduhub.net/edu-sharing/rest/:path*"
+    },
+    {
+      "source": "/api/openai/:path*",
+      "destination": "https://api.openai.com/:path*"
+    },
+    {
+      "source": "/api/gwdg/:path*",
+      "destination": "https://chat-ai.academiccloud.de/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Accept, Authorization, Content-Type" }
+      ]
+    }
+  ]
+}
