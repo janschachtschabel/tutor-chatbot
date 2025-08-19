@@ -39,6 +39,11 @@ export function listAvailableDatasets() {
     const id = pathToId(path);
     list.push({ id, name: idToNiceName(id), kind: 'json', path });
   }
+  // Also expose datasets provided via compact quantized assets in /public/quant
+  const klexId = 'qa_Klexikon-Prod-180825';
+  if (!list.some(d => d.id === klexId)) {
+    list.push({ id: klexId, name: idToNiceName(klexId), kind: 'quant' });
+  }
   return list;
 }
 
@@ -54,7 +59,8 @@ export function setSelectedDatasetId(id) {
 export function getDefaultDatasetId() {
   const jsonIds = Object.keys(jsonModules).map(pathToId);
   if (jsonIds.length > 0) return jsonIds[0];
-  return 'builtin-sample';
+  // Prefer Klexikon quantized dataset if available in public/quant
+  return 'qa_Klexikon-Prod-180825';
 }
 
 function normalizeRecord(rec) {

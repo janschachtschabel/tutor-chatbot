@@ -93,8 +93,10 @@ function App() {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
-    if (!apiKey) {
-      setError(`${currentProvider?.name || 'LLM'} API Key nicht gefunden. Bitte prüfen Sie die Umgebungsvariablen.`);
+    // In Serverless-Proxy-Modus (baseUrl beginnt mit /api/) wird kein Client-API-Key benötigt.
+    const needsClientKey = currentProvider?.baseUrl && !currentProvider.baseUrl.startsWith('/api/');
+    if (needsClientKey && !apiKey) {
+      setError(`${currentProvider?.name || 'LLM'} API Key nicht gefunden. Bitte Umgebungsvariablen prüfen oder Serverless-Proxy verwenden.`);
       return;
     }
 
