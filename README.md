@@ -193,13 +193,13 @@ npm run preview
 
 ### OpenAI API
 - Endpoint: https://api.openai.com/v1
-- Modell: gpt-4o-mini
+- Modell: gpt-4.1-mini
 - Verwendung: Hauptsächliche KI-Antworten und Learning Analytics
 
 ### GWDG API
 - Endpoint: https://chat-ai.academiccloud.de/v1
-- Modell: llama-3.1-70b-versatile
-- Verwendung: Alternative zu OpenAI
+- Modell: gpt-oss-120b
+- Verwendung: Alternative zu OpenAI API
 
 ### WirLernenOnline.de API
 - Endpoint: https://www.wirlernenonline.de/api/v1
@@ -280,11 +280,11 @@ python scripts/precompute_openai_embeddings.py -i src/data/qa_Klexikon-Prod-1808
 
 ## 📄 Lizenz
 
-Dieses Projekt steht unter der MIT Lizenz - siehe die [LICENSE](LICENSE) Datei für Details.
+Dieses Projekt steht unter der Apache 2.0 Lizenz - siehe die [LICENSE](LICENSE) Datei für Details.
 
 ## 🙏 Danksagungen
 
 - [WirLernenOnline.de](https://wirlernenonline.de) für die Lernmaterialien-API
-- [OpenAI](https://openai.com) für die GPT-4o-mini API
+- [OpenAI](https://openai.com) für die LLM-API
 - [GWDG](https://gwdg.de) für die alternative LLM-API
 - React, Vite und alle verwendeten Open Source Libraries
