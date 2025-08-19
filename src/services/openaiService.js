@@ -16,7 +16,7 @@ export const LLM_PROVIDERS = {
     id: 'openai',
     name: 'OpenAI',
     model: import.meta.env.VITE_OPENAI_API_MODEL || 'gpt-4o-mini',
-    baseUrl: 'https://api.openai.com/v1',
+    baseUrl: '/api/openai/v1',
     apiKeyEnv: 'VITE_OPENAI_API_KEY'
   },
   GWDG: {
@@ -128,9 +128,6 @@ export async function findBestMatch(userQuestion) {
 
 // Generic LLM API call using axios like lernbegleiter
 export async function callLLM(messages, provider, apiKey) {
-  if (!apiKey) {
-    throw new Error(`${provider.name} API Key ist erforderlich`);
-  }
 
   try {
     const axios = (await import('axios')).default;
@@ -152,7 +149,7 @@ export async function callLLM(messages, provider, apiKey) {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
       }
     });
 
@@ -210,10 +207,7 @@ function enforceLabelPrefix(text, wantQALabel) {
 export async function processMessage(message, conversationHistory = []) {
   const provider = getCurrentProvider();
   const apiKey = getApiKeyForProvider(provider);
-  
-  if (!apiKey) {
-    throw new Error(`${provider.name} API Key nicht gefunden. Bitte prüfen Sie die Umgebungsvariablen.`);
-  }
+
 
   // Check for QA match first
   const qaMatch = await findBestMatch(message);

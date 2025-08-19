@@ -14,7 +14,6 @@ export function getEmbeddingMeta() {
 export async function embedTextsOpenAI(texts) {
   if (!Array.isArray(texts) || texts.length === 0) return [];
   const apiKey = import.meta.env?.VITE_OPENAI_API_KEY || (typeof process !== 'undefined' && process.env?.OPENAI_API_KEY);
-  if (!apiKey) throw new Error('Kein OpenAI API-Schlüssel verfügbar für Embeddings.');
   const response = await axios.post('/api/openai/v1/embeddings', {
     model: OPENAI_EMBEDDING_MODEL,
     input: texts
@@ -22,7 +21,7 @@ export async function embedTextsOpenAI(texts) {
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
+      ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
     }
   });
   return response.data.data.map(d => d.embedding);
